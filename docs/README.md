@@ -64,7 +64,7 @@ python3 visualize_volume.py --volume data/reconstructions/pbm.npy --mode napari
 ⑤  napari 交互式 3D 可视化 (--align_to_scan 自动对齐扫描方向)
 ```
 
-### 为什么这样设计
+### 设计
 
 | 模块 | 职责 | 安全边界 |
 |------|------|---------|
@@ -73,19 +73,6 @@ python3 visualize_volume.py --volume data/reconstructions/pbm.npy --mode napari
 | **scan_planner** | marker + 体模点云 → 沿曲面的 waypoint 序列 | RBF 拟合 + SG 平滑；Z 安全 floor `max_push_below_contact_mm: 0` |
 | **★ force_scan_node** | 力控 touchdown + 力自适应 Z 调整 + 自动录制 | UR 内部 PROTECTIVE_STOP；touchdown_force ~2.5N 软接触；force_adaptive 累积上限 -10mm |
 
-VLM 出错最坏后果是**路径方向不对**或**端点超 FOV**——力控层的 touchdown / Z floor / force_adaptive **三道防线都不会被绕过**：
-
-- 端点反投影到桌面 → touchdown 到桌面就停（不深压）
-- VLM 给的方向偏 → 探头扫到空气 → force_adaptive 检测到脱接触只往**下**调（不抬头），上限 10mm
-- 任何一步 VLM / anchor 失败 → service 立即 `success=false`，机械臂不动作
-
-### 实测效果（100mm 长轴扫一次）
-
-- VLM 单次调用 30–60s（云端 thinking 模型 streaming）
-- Touchdown 接触精度 < 1mm（depth-cam 估计差 18mm 也能精确补偿）
-- Post-scan probe_tip Z 误差 ≈ 0.6mm
-- PBM 重建 Pass 2 fill ratio ~66%（197 帧）
-- 零 PROTECTIVE_STOP / 零保护停
 
 ## 系统架构
 
@@ -1092,101 +1079,6 @@ rostopic echo /joint_states
 rostopic echo /wrench
 rosservice call /ur_hardware_interface/zero_ftsensor   # 验证 F/T 清零可用
 ```
-
-## 故障排查
-
-### 超声画面全黑（mean=0）
-
-1. **超声机器没开** → 看屏幕是否亮、有无 B-mode 画面
-2. **HDMI 线松了** → 拔下来重插**两端**（超声机端 + 采集卡端）
-3. **超声机视频输出关了** → 在机器菜单里启用 `Video Output`
-4. **绕过 ROS 直接验证**：`ffplay -f v4l2 -input_format mjpeg -video_size 640x480 /dev/us_capture`
-5. `us_capture_node` 会在画面持续黑 3s 后打印 WARN，留意日志
-
-### `/dev/us_capture` 不存在
-
-1. udev rule 未装：`sudo cp tools/99-us-capture.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger`
-2. 序列号不对：`lsusb -v 2>/dev/null | grep -i -A3 macrosilicon`，把 `iSerial` 字段填到 rules 里
-3. 临时 fallback：`rosrun us3d_perception us_capture_node.py _device_id:=0`
-
-### `Failed to reach approach position` 或扫描手腕角度过大
-
-日志中 `Scan attitude: rotating wrist by XX.X°` 显示需要旋转的角度。
-
-- 角度 > 120° 时 wrist3 关节可能转不过去 → 重新设置 home 位姿，让起始姿态更接近扫描方向
-- `rosservice call /us3d/move_home` 调整后 `rosservice call /us3d/record_home` 保存
-
-### 重建结果稀疏 / "百叶窗"伪影
-
-- 用 PBM 重建（不要用 voxel_reconstruct）：`pbm_reconstruct.py`
-- 调大 `--elevation_sigma_mm` 到 3.5-5.0
-- 调大 `--hole_fill_sigma_mm` 到 2.5，`--hole_fill_iter` 到 3
-- 检查扫描速度是否过快（应 ≤ 5 mm/s）
-
-### 数据集里有"飞出去"的位姿离群帧
-
-- 用 `diagnose_outlier_frames.py` 找出哪些帧
-- 重建时加 `--pose_percentile 5` 砍掉
-- 根本解决：用最新的 `force_scan_node`（自动 stable_wait 已经避免了头尾过渡帧入数据集）
-
-### Touchdown 触发 UR PROTECTIVE_STOP（C153/C157）
-
-- **C153 = 关节加速度超限**：把 `scan.scan_accel_factor` 调到 0.05 或更小
-- **C157 = 关节力矩超限**：通常是探头被压进表面太深
-  - 检查 `Scan geometry check` 日志里的 `target probe_tip.z (last)` 是不是远低于 first
-  - 如果是：`max_push_below_contact_mm: 0` 严格不允许探头深压（默认）
-  - 检查 `touchdown_force` 是否过大（建议 2.5–3 N）
-
-### 路径 Z 趋势看着不对
-
-- 在 RViz 里同时看：
-  - 白色 raw cloud `/camera/depth/points`（应该有体模点）
-  - 绿色 surface cloud `/us3d/surface_cloud`（filter 后）
-  - 红色 path arrows `/us3d/scan_path`
-- 如果绿色 cloud 没贴上体模 → **crop 漏了体模**：
-  - 加大 `surface_fitting.crop_margin`（默认 60mm，可加到 100mm）
-  - 加大 `surface_fitting.crop_z_extent_min`（默认 300mm）
-- 如果绿色 cloud 在体模上但 path 反向 → 看 `RAW path Z (BEFORE smoothing)` 诊断行
-  - 三个趋势诊断（DEPTH-CLOUD / RAW path / SMOOTHED）应该一致
-  - 都反向 → marker 摆放方向问题 → `reverse_scan_direction: true`
-- 极端情况：开 `invert_z_trend: true` 或 `flat_scan_at_contact_z: true` 应急
-
-### 探头不接触表面 / 探头压不上 / "翘起"
-
-- 可能是 path Z 上升超过实际表面 → 探头悬空
-- 默认 `max_push_below_contact_mm: 0` + `flat_force_vertical: true` 已尽量避免
-- 终极方案：用 forceMode 真力控（接触力恒定，Z 自动调），见 README 待办章节
-
-### Octomap 阻挡 approach
-
-- 错误：`Found a contact between '<octomap>' and 'camera_mount'`
-- 自动修复：`force_scan` 在 approach 前会 `/clear_octomap`
-- 长期修复：`ur5e_moveit_sensor_manager.launch.xml` 已配 `min_range: 0.30` 过滤近距离点
-- 还失败：把相机移远点 / 关闭 octomap：在 launch 里去掉 sensor_plugin
-
-### 扫描后机械臂动得很慢（move_home 超时）
-
-- 上次扫描中断了，UR speed slider 卡在低速（force_scan 没执行 `_restore_speed_slider`）
-- 立即修复：`rosservice call /us3d/restore_speed`
-- 或直接用 UR 接口：`rosservice call /ur_hardware_interface/set_speed_slider "speed_slider_fraction: 1.0"`
-- 长期：force_scan_node 的 `try/finally` + `on_shutdown` 会保护，但中断时机不对仍可能漏
-
-### 中间一段帧被过滤（reconstruction 缺一段）
-
-- 跑 `python3 -c` 脚本看 metadata.csv 中间是不是 |Fz| < threshold
-- 如果是 → 探头中途脱接触：
-  - 启用 `force_adaptive_scan: true`（默认开），让 z_offset 累积下压
-  - 或重建时降低过滤阈值：`--force_threshold 0.3`
-  - 或目测确认探头其实贴着，用 `--force_threshold 0.0`（仅靠图像 intensity 过滤）
-- 视觉确认：看 frames 中间几张 PNG，有清晰超声纹理 = 还在贴
-
-### napari 显示斜的 / 上下颠倒 / 模糊
-
-- 斜的：加 `--align_to_scan` 自动旋转
-- 颠倒：加 `--flip_y`（最常见）或 `--flip_z` / `--flip_x`
-- 模糊/锯齿：
-  - 短期：加 `--smooth_display 0.5` 显示平滑
-  - 长期：重建用更小 voxel `--voxel_size 0.0004`
 
 ## 技术栈
 
