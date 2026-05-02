@@ -9,10 +9,10 @@
 # All fields can be overridden by node-private params (~name).
 vlm:
   # ---- Connection ----------------------------------------------
-  base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"   # OpenAI-compatible base URL
-  api_key:  "e692d760-7044-4b46-bc72-6e03dfb6261a"                       # 不要把真实 key 提交到公开仓库；
+  base_url: ""   # OpenAI-compatible base URL
+  api_key:  ""                       # 不要把真实 key 提交到公开仓库；
                                           #   建议改用环境变量 / 私有覆盖文件
-  model:    "kimi-k2.6"                   # vision-language model；
+  model:    ""                   # vision-language model；
                                           #   ★ Kimi-k2.x 是 thinking
                                           #   model：会把推理写到
                                           #   reasoning_content 中，
