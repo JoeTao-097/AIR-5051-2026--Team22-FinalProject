@@ -1,0 +1,32 @@
+# === 力控机械臂超声体模扫描与3D重建系统 ===
+# conda create -n joeros python=3.8
+# conda activate joeros
+# pip install -r requirements.txt
+
+# Robot control
+ur-rtde>=1.5.9
+
+# Computer vision & image processing
+opencv-contrib-python>=4.5.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# 3D reconstruction & visualization
+open3d>=0.19.0
+transforms3d>=0.4.0
+
+# ROS Python support (installed via --target into conda env)
+rospkg>=1.5.0
+catkin-pkg>=1.0.0
+empy
+defusedxml
+netifaces
+
+# MoveIt dependency
+pyassimp>=5.0
+
+# Config
+PyYAML>=6.0
+
+# VLM client (OpenAI-compatible HTTP API, e.g. vLLM server)
+requests>=2.28.0

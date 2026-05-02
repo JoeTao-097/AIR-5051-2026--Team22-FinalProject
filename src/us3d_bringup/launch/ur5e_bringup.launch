@@ -1,0 +1,13 @@
+<launch>
+  <!-- UR5e robot driver and URDF -->
+  <arg name="robot_ip" default="192.168.1.3"/>
+  <arg name="kinematics_config" default="$(find us3d_bringup)/config/ur5e_calibration.yaml"/>
+
+  <!-- UR robot driver (includes robot_state_publisher + URDF loading) -->
+  <include file="$(find ur_robot_driver)/launch/ur5e_bringup.launch">
+    <arg name="robot_ip" value="$(arg robot_ip)"/>
+    <arg name="kinematics_config" value="$(arg kinematics_config)"/>
+    <arg name="robot_description_file" value="$(find us3d_bringup)/launch/load_ur5e_with_probe.launch"/>
+    <arg name="ur_hardware_interface_node_required" value="false"/>
+  </include>
+</launch>

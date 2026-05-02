@@ -1,0 +1,24 @@
+<launch>
+  <!-- UR5e real robot + MoveIt + RViz -->
+  <arg name="robot_ip" default="192.168.1.3"/>
+  <arg name="kinematics_config" default="$(find us3d_bringup)/config/ur5e_calibration.yaml"/>
+
+  <!-- 1. Robot driver -->
+  <include file="$(find us3d_bringup)/launch/ur5e_bringup.launch">
+    <arg name="robot_ip" value="$(arg robot_ip)"/>
+    <arg name="kinematics_config" value="$(arg kinematics_config)"/>
+  </include>
+
+  <!-- 2. MoveIt move_group -->
+  <include file="$(find ur5e_moveit_config)/launch/moveit_planning_execution.launch"/>
+
+  <!-- 3. RViz -->
+  <include file="$(find ur5e_moveit_config)/launch/moveit_rviz.launch">
+    <arg name="config" value="$(find ur5e_moveit_config)/launch/moveit.rviz"/>
+  </include>
+
+  <!-- 4. Load scan parameters -->
+  <rosparam file="$(find us3d_bringup)/config/robot.yaml" command="load"/>
+  <rosparam file="$(find us3d_bringup)/config/scan.yaml" command="load"/>
+  <rosparam file="$(find us3d_bringup)/config/home_position.yaml" command="load"/>
+</launch>

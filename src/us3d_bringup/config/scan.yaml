@@ -1,0 +1,228 @@
+# Scan parameters
+scan:
+  line_spacing: 0.003             # m (3mm between parallel scan lines)
+  scan_speed: 0.003               # m/s (3mm/s — denser sampling AND
+                                  #   smaller force/accel transients
+                                  #   when probe is in contact;
+                                  #   0.10 mm/frame at 28 fps = 5×
+                                  #   denser elevation sampling than
+                                  #   the original 10 mm/s)
+  scan_accel_factor: 0.05         # MoveIt acceleration scaling for scan
+                                  #   (0.05 = 5% of group max). Capping
+                                  #   acceleration prevents joint-accel
+                                  #   spikes (UR error C153Ax → PROTECTIVE
+                                  #   STOP) when the probe is in contact.
+  speed_slider_reference_mms: 20.0  # Reference: at UR speed_slider=1.0,
+                                    #   a typical MoveIt Cartesian scan
+                                    #   runs at ~20 mm/s. Used to compute
+                                    #   slider fraction = scan_speed/this.
+                                    #   Calibrate empirically: scan once
+                                    #   at slider=1.0, measure actual
+                                    #   mm/s, set this value to match.
+
+  # ─── Force-adaptive scan (per-segment Z adjustment) ────────────
+  # During scan execution, after each waypoint segment, read Fz.
+  # If |Fz| < min_force (lost contact), lower Z by `step` for all
+  # subsequent segments. Z offset is monotonically non-increasing
+  # (only pushes deeper, never lifts). Capped at -max_push for safety.
+  force_adaptive_scan: true        # Enable per-segment Fz monitoring
+  force_adaptive_min_force: 2.0    # N: |Fz| below this = "lost contact"
+  force_adaptive_step: 0.001       # m: lower Z by this much per loss
+  force_adaptive_max_push: 0.010   # m: cap cumulative offset (10mm)
+  force_adaptive_settle_s: 0.15    # s: wait after each segment to read Fz
+  approach_height: 0.05           # m (50mm above surface for approach)
+  probe_length: 0.160             # m (5mm mount + 155mm probe body = 160mm total)
+  waypoint_step: 0.001            # m (1mm interpolation step)
+  scan_half_length: 0.05          # m (50mm each side from marker midpoint)
+  servo_frequency: 125            # Hz (UR e-Series servo rate)
+  keypoint_step: 0.015            # m (15mm between movel keypoints for URScript)
+
+  # ─── Acquisition quality controls (added to suppress transient frames) ───
+  auto_record: true               # Auto-trigger sync_recorder around scan
+  stable_wait_before: 0.7         # s, hold still after contact before recording
+  stable_wait_after: 0.3          # s, hold still after scan before retracting
+  zero_ft_sensor: true            # Zero F/T sensor while suspended above surface
+  hide_cursor: true               # Move mouse out of US display during scan
+
+  # ─── Force-based touchdown Z calibration ─────────────────────────
+  # Before scanning, slowly descend until contact is detected; record
+  # the offset between depth-camera-predicted surface height and actual
+  # contact height; apply this Z correction to every waypoint. Critical
+  # when depth cloud has 1-5cm error (typical for RGBD on tissue).
+  touchdown_enabled: true
+  touchdown_force: 2.5            # N, |dFz| above baseline that triggers contact
+                                  #   Keep low (2-3N): the robot continues
+                                  #   decelerating after our software stop and
+                                  #   force overshoots. UR's internal safety
+                                  #   triggers PROTECTIVE_STOP if peak force >
+                                  #   ~25-30N. Lower threshold = lower peak.
+  touchdown_max_descent: 0.10     # m, give up if no contact within this distance
+  touchdown_speed: 0.002          # m/s, descent speed (slower = softer contact)
+                                  #   2 mm/s ≈ ¼ kinetic energy of 5 mm/s.
+                                  #   Total touchdown time = max_descent/speed
+                                  #   = 50s worst case (rare; typical 5-15s).
+  touchdown_step: 0.003           # m, descent step size per micro-move
+                                  #   Smaller = safer (less per-step kinetic
+                                  #   energy) but slower. 3 mm is a good
+                                  #   compromise. With touchdown_max_descent
+                                  #   = 100mm: 33 steps × ~0.7s = ~25s worst case.
+  touchdown_extra_press: 0.0      # m, optional extra press after contact (e.g. 0.002 for 2mm)
+
+# Ultrasound capture
+ultrasound:
+  # Prefer stable symlink /dev/us_capture (created by udev rule
+  #   tools/99-us-capture.rules) — the integer index of the V4L2
+  #   device file changes whenever the capture card re-enumerates.
+  # Fall back to integer 0 if the symlink does not yet exist.
+  device_id: "/dev/us_capture"
+  frame_width: 640
+  frame_height: 480
+  fps: 30
+  blank_warn_secs: 3.0            # Warn if frames stay all-black this long
+
+# ArUco detection
+aruco:
+  dictionary: "DICT_4X4_50"       # ArUco dictionary type
+  marker_size: 0.075              # m (75mm marker side length)
+  marker_ids: [0, 1, 2, 3]       # Expected marker IDs on phantom
+
+# Observation poses for marker detection (joint angles in radians)
+# Robot moves to these poses to observe the phantom before scanning
+observation_poses:
+  - name: "front_view"
+    joints: [-1.5708, -1.3090, 1.3090, -1.5708, -1.5708, 0.0]
+  - name: "left_view"
+    joints: [-1.2217, -1.3090, 1.3090, -1.5708, -1.5708, 0.0]
+  - name: "right_view"
+    joints: [-1.9199, -1.3090, 1.3090, -1.5708, -1.5708, 0.0]
+
+# Data recording
+recording:
+  output_dir: "/home/qc/joe/us3dscan/data/scans"
+  sync_tolerance: 0.01            # s (10ms time sync tolerance)
+  save_rosbag: true
+  warmup_frames: 5                # Discard first N synced frames after start
+                                  #   (drains stale USB-capture buffer to
+                                  #   eliminate the ~50-150 ms latency tail).
+
+# Surface fitting (for curved-surface scan planning)
+surface_fitting:
+  voxel_size: 0.002              # m (2mm voxel downsampling)
+  crop_margin: 0.06              # m (60mm ROI expansion in XY beyond markers)
+                                 #   Larger = captures more of the phantom
+                                 #   when markers are placed BESIDE (not
+                                 #   on) it. Default 60mm covers a typical
+                                 #   neck/body part width. Reduce only if
+                                 #   you have markers placed precisely on
+                                 #   the scan surface.
+  crop_z_extent_min: 0.30        # m (minimum Z extent of crop bbox)
+                                 #   Markers usually sit at table level
+                                 #   while phantom rises tens of mm above.
+                                 #   300mm Z range = 150mm above and below
+                                 #   marker midpoint, capturing tall
+                                 #   phantoms (necks, abdomens, etc.).
+  outlier_nb_neighbors: 20       # statistical outlier filter neighbor count
+  outlier_std_ratio: 2.0         # statistical outlier filter std multiplier
+  # Top-layer extraction: depth cloud often captures both the table
+  # and the phantom surface. We try two strategies in order:
+  #   1) GAP-DETECTION: if there's a clear Z-gap (>= min_gap_mm)
+  #      between background and phantom, use it.
+  #   2) PERCENTILE: keep top keep_percent% of points by Z value
+  #      (always works, robust to sparse data).
+  extract_top_layer: true
+  top_layer_thickness_mm: 30.0   # (no longer primary; kept for back-compat)
+  top_layer_min_gap_mm: 3.0      # min gap (mm) to qualify as separator
+  top_layer_keep_percent: 30.0   # PERCENTILE strategy: keep top N%
+                                 #   of points by Z (when gap detection
+                                 #   fails). 30% is a good default for
+                                 #   typical phantom-on-table setups.
+  top_layer_min_points: 8        # always keep at least this many points
+
+# Path post-smoothing (suppresses RBF-noise-induced wrist twist
+# and probe-lifting during scan execution)
+flat_surface_threshold_mm: 1000  # If smoothed Z range < this (mm), the
+                                 #   planner uses ONE shared probe
+                                 #   orientation. Set very large to
+                                 #   FORCE flat mode (recommended when
+                                 #   the depth cloud has few points
+                                 #   in the scan region — RBF on sparse
+                                 #   data gives unreliable surface fits
+                                 #   and causes wrist twist + path Z
+                                 #   curvature artifacts → joint accel
+                                 #   spikes → C153A3 PROTECTIVE_STOP).
+                                 #   Set to 6.0 only when you have a
+                                 #   dense (>500 points) depth scan and
+                                 #   genuine curved geometry.
+flat_force_vertical: true        # When the surface is detected flat,
+                                 #   FORCE the probe orientation to be
+                                 #   exactly vertical (perpendicular to
+                                 #   gravity) instead of using the
+                                 #   averaged depth-cloud normal.
+z_smooth_window_mm: 30.0         # SG filter window (mm) for the path
+                                 #   Z curve. Larger = smoother, less
+                                 #   sensitive to local RBF artifacts
+                                 #   on sparse depth clouds, but loses
+                                 #   small surface features.
+flat_use_constant_z: false       # Keep the per-waypoint Z from the
+                                 #   depth-cloud RBF surface fit (so
+                                 #   the path follows the actual
+                                 #   surface curvature). Set true to
+                                 #   force a constant Z = median
+                                 #   surface (use only when the depth
+                                 #   cloud is very sparse and unreliable).
+flat_scan_at_contact_z: false    # Keep per-waypoint Z and just SHIFT
+                                 #   the whole path by the touchdown
+                                 #   offset (dz_correction) to align
+                                 #   start with the real surface.
+                                 #   Set true to force every waypoint
+                                 #   to the contact Z (flat scan).
+invert_z_trend: false            # Reflect every waypoint Z about
+                                 #   keypoints[0].z so the path Z
+                                 #   slope flips sign. Use when you
+                                 #   observe (in RViz or by physical
+                                 #   measurement) that the depth
+                                 #   camera estimates the surface
+                                 #   slope in the WRONG direction
+                                 #   (e.g. depth says descending,
+                                 #   real surface ascends). XY of
+                                 #   the path is unchanged.
+
+reverse_scan_direction: false    # Swap marker0/marker1 in the
+                                 #   planner so the scan goes from
+                                 #   marker1 → marker0 instead of
+                                 #   marker0 → marker1. Use when
+                                 #   physical ArUco IDs were placed
+                                 #   in the opposite of the desired
+                                 #   scan direction.
+
+max_push_below_contact_mm: 0.0   # Safety floor: probe is NEVER asked
+                                 #   to descend more than this many mm
+                                 #   below the touchdown contact Z. The
+                                 #   path can rise freely (probe just
+                                 #   lifts off if depth-cam said
+                                 #   surface rises). Crucial for
+                                 #   protecting against bad depth-cam
+                                 #   Z-curve estimates that would
+                                 #   otherwise drive the probe deep
+                                 #   into the surface and trigger UR
+                                 #   joint-torque protective stop
+                                 #   (C157Ax). 0 = strictly no pushing
+                                 #   below contact; set 2-5 for soft
+                                 #   tissue if you want some compliance.
+
+# Ultrasound image ROI (crop out device GUI, keep only tissue image)
+# Determined from USB capture frame (640x480) of 7L4C probe at D=64mm.
+# Height tightened from 370 → 220 to drop the bottom "no-signal" black band
+# (pixels v=220..369 are essentially below the deepest useful echo).
+us_roi:
+  x: 165
+  y: 62
+  width: 360
+  height: 220
+
+# Ultrasound spatial calibration
+# 7L4C probe: ~40mm aperture width, D=64mm depth
+us_calibration:
+  pixel_size_x: 0.000111          # m/pixel (40mm / 360px = 0.111mm)
+  pixel_size_y: 0.000173          # m/pixel (64mm / 370px = 0.173mm)
+  # T_probe_us will be loaded from calibration/ directory after calibration

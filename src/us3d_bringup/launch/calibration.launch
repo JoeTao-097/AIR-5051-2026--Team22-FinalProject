@@ -1,0 +1,41 @@
+<launch>
+  <!-- Hand-eye calibration using easy_handeye (eye-in-hand setup) -->
+  <arg name="robot_ip" default="192.168.1.3"/>
+  <arg name="marker_size" default="0.075"/>
+  <arg name="marker_id" default="0"/>
+
+  <!-- Bring up robot -->
+  <include file="$(find us3d_bringup)/launch/ur5e_bringup.launch">
+    <arg name="robot_ip" value="$(arg robot_ip)"/>
+  </include>
+
+  <!-- MoveIt (needed for calibration mover) -->
+  <include file="$(find ur5e_moveit_config)/launch/moveit_planning_execution.launch"/>
+
+  <!-- Bring up camera -->
+  <include file="$(find us3d_bringup)/launch/camera.launch"/>
+
+  <!-- ArUco marker tracking for calibration (custom node, replaces aruco_ros) -->
+  <node name="aruco_tracker" pkg="us3d_perception" type="aruco_tf_publisher.py" output="screen">
+    <param name="dictionary" value="0"/>
+    <param name="marker_size" value="$(arg marker_size)"/>
+    <param name="marker_id" value="$(arg marker_id)"/>
+    <param name="camera_frame" value="camera_color_optical_frame"/>
+    <param name="marker_frame" value="aruco_marker_frame"/>
+  </node>
+
+  <!-- Show ArUco detection result -->
+  <node name="aruco_result_view" pkg="image_view" type="image_view" output="screen">
+    <remap from="image" to="/aruco_tracker/result"/>
+  </node>
+
+  <!-- easy_handeye calibration -->
+  <include file="$(find easy_handeye)/launch/calibrate.launch">
+    <arg name="eye_on_hand" value="true"/>
+    <arg name="namespace_prefix" value="us3d_handeye"/>
+    <arg name="robot_base_frame" value="base_link"/>
+    <arg name="robot_effector_frame" value="tool0"/>
+    <arg name="tracking_base_frame" value="camera_color_optical_frame"/>
+    <arg name="tracking_marker_frame" value="aruco_marker_frame"/>
+  </include>
+</launch>

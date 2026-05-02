@@ -1,0 +1,66 @@
+<launch>
+  <!-- UR5e with probe & camera in Gazebo + MoveIt -->
+  <arg name="gui" default="true"/>
+  <arg name="paused" default="false"/>
+  <arg name="kinematics_config" default="$(find ur_description)/config/ur5e/default_kinematics.yaml"/>
+
+  <!-- Use Gazebo simulation clock -->
+  <param name="/use_sim_time" value="true"/>
+
+  <!-- ============ 1. Load custom URDF (with probe + camera) ============ -->
+  <param name="robot_description"
+         command="xacro '$(find us3d_bringup)/urdf/ur5e_with_probe_gazebo.urdf.xacro'
+                  kinematics_config:=$(arg kinematics_config)"/>
+
+  <!-- Robot state publisher -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+    <param name="publish_frequency" value="500"/>
+  </node>
+
+  <!-- ============ 2. Gazebo simulation ============ -->
+  <rosparam file="$(find ur_gazebo)/config/ur5e_controllers.yaml" command="load"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="gui" value="$(arg gui)"/>
+  </include>
+
+  <node name="spawn_gazebo_model" pkg="gazebo_ros" type="spawn_model"
+        args="-urdf -param robot_description -model ur5e_robot -z 0.1
+              -J shoulder_pan_joint 0.0
+              -J shoulder_lift_joint -1.57
+              -J elbow_joint 0.0
+              -J wrist_1_joint -1.57
+              -J wrist_2_joint 0.0
+              -J wrist_3_joint 0.0"
+        output="screen" respawn="false"/>
+
+  <node name="ros_control_controller_spawner" pkg="controller_manager" type="spawner"
+        args="joint_state_controller eff_joint_traj_controller" output="screen" respawn="false"/>
+
+  <node name="ros_control_stopped_spawner" pkg="controller_manager" type="spawner"
+        args="--stopped joint_group_eff_controller" output="screen" respawn="false"/>
+
+  <!-- ============ 3. MoveIt ============ -->
+  <!-- Remap MoveIt controller action to Gazebo's eff_joint_traj_controller -->
+  <remap from="/scaled_pos_joint_traj_controller/follow_joint_trajectory"
+         to="/eff_joint_traj_controller/follow_joint_trajectory"/>
+
+  <include file="$(find ur5e_moveit_config)/launch/move_group.launch">
+    <arg name="allow_trajectory_execution" value="true"/>
+    <arg name="fake_execution" value="false"/>
+    <arg name="info" value="true"/>
+    <arg name="load_robot_description" value="false"/>
+    <arg name="pipeline" value="ompl"/>
+  </include>
+
+  <!-- ============ 4. RViz ============ -->
+  <include file="$(find ur5e_moveit_config)/launch/moveit_rviz.launch">
+    <arg name="config" value="$(find ur5e_moveit_config)/launch/moveit.rviz"/>
+  </include>
+
+  <!-- ============ 5. Load scan parameters (optional, for node testing) ============ -->
+  <rosparam file="$(find us3d_bringup)/config/robot.yaml" command="load"/>
+  <rosparam file="$(find us3d_bringup)/config/scan.yaml" command="load"/>
+
+</launch>

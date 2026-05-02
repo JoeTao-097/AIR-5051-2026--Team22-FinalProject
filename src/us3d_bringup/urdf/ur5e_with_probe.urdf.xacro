@@ -1,0 +1,123 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="ur5e_robot">
+
+  <!-- ============ Parameters ============ -->
+  <xacro:arg name="kinematics_config" default="$(find ur_description)/config/ur5e/default_kinematics.yaml"/>
+
+  <!-- Probe mount offset from tool0 (measured, rotated 90° around Y) -->
+  <xacro:arg name="probe_x" default="0.0"/>
+  <xacro:arg name="probe_y" default="0.0"/>
+  <xacro:arg name="probe_z" default="0.005"/>
+  <xacro:arg name="probe_roll"  default="0.0"/>
+  <xacro:arg name="probe_pitch" default="0.0"/>
+  <xacro:arg name="probe_yaw"   default="1.5708"/>
+
+  <!-- Camera mount offset from tool0 (translation from calibration, rotation measured) -->
+  <xacro:arg name="camera_x" default="0.0693"/>
+  <xacro:arg name="camera_y" default="0.0201"/>
+  <xacro:arg name="camera_z" default="0.0182"/>
+  <xacro:arg name="camera_roll"  default="0.0"/>
+  <xacro:arg name="camera_pitch" default="-1.5708"/>
+  <xacro:arg name="camera_yaw"   default="0.0"/>
+
+  <!-- ============ UR5e Robot ============ -->
+  <xacro:include filename="$(find ur_description)/urdf/inc/ur5e_macro.xacro"/>
+  <xacro:ur5e_robot
+    prefix=""
+    kinematics_parameters_file="$(arg kinematics_config)"
+  />
+
+  <!-- World frame = base_link -->
+  <link name="world"/>
+  <joint name="world_joint" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ============ Ultrasound Probe ============ -->
+  <!-- Physical probe: 155mm body length (measured), 5mm mount.
+       Total tool0→probe_tip distance when probe is straight = 160mm. -->
+  <link name="probe_mount">
+    <visual>
+      <geometry>
+        <box size="0.058 0.025 0.155"/>
+      </geometry>
+      <origin xyz="0 0 0.0775" rpy="0 0 0"/>
+      <material name="probe_grey">
+        <color rgba="0.5 0.5 0.5 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.058 0.025 0.155"/>
+      </geometry>
+      <origin xyz="0 0 0.0775" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="0.3"/>
+      <origin xyz="0 0 0.0775"/>
+      <inertia ixx="0.0007" ixy="0" ixz="0" iyy="0.0007" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <joint name="tool0_to_probe" type="fixed">
+    <parent link="tool0"/>
+    <child link="probe_mount"/>
+    <origin xyz="$(arg probe_x) $(arg probe_y) $(arg probe_z)"
+            rpy="$(arg probe_roll) $(arg probe_pitch) $(arg probe_yaw)"/>
+  </joint>
+
+  <link name="probe_tip"/>
+  <joint name="probe_to_tip" type="fixed">
+    <parent link="probe_mount"/>
+    <child link="probe_tip"/>
+    <origin xyz="0 0 0.155" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Ultrasound imaging plane origin at probe tip, Z=0 is the image plane -->
+  <link name="us_image_plane"/>
+  <joint name="tip_to_us_plane" type="fixed">
+    <parent link="probe_tip"/>
+    <child link="us_image_plane"/>
+    <!-- Will be refined by ultrasound spatial calibration -->
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ============ Orbbec Camera (eye-in-hand) ============ -->
+  <link name="camera_mount">
+    <visual>
+      <geometry>
+        <box size="0.003 0.09 0.025"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="cam_black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.03 0.09 0.025"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.00002" ixy="0" ixz="0" iyy="0.00007" iyz="0" izz="0.00007"/>
+    </inertial>
+  </link>
+
+  <joint name="tool0_to_camera_mount" type="fixed">
+    <parent link="tool0"/>
+    <child link="camera_mount"/>
+    <origin xyz="$(arg camera_x) $(arg camera_y) $(arg camera_z)"
+            rpy="$(arg camera_roll) $(arg camera_pitch) $(arg camera_yaw)"/>
+  </joint>
+
+  <link name="camera_link"/>
+  <joint name="camera_mount_to_camera_link" type="fixed">
+    <parent link="camera_mount"/>
+    <child link="camera_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

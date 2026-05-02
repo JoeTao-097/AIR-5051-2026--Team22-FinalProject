@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# IDE
+.vscode/
+.idea/
+
+# ROS build artifacts
+build/
+devel/
+*.sage.py
+
+# Calibration data (may contain large binary files)
+src/us3d_bringup/config/calibration/

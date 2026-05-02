@@ -1,0 +1,77 @@
+<launch>
+  <!-- Full ultrasound 3D scanning system -->
+  <arg name="robot_ip" default="192.168.1.3"/>
+  <arg name="enable_vlm" default="false"/>     <!-- start phantom_recognizer + instruction_planner -->
+  <arg name="vlm_base_url" default=""/>        <!-- override /vlm/base_url -->
+  <arg name="vlm_model" default=""/>           <!-- override /vlm/model -->
+
+  <!-- Load parameters -->
+  <rosparam file="$(find us3d_bringup)/config/robot.yaml" command="load"/>
+  <rosparam file="$(find us3d_bringup)/config/scan.yaml" command="load"/>
+  <rosparam file="$(find us3d_bringup)/config/home_position.yaml" command="load"/>
+
+  <!-- 1. Robot bringup (UR5e + URDF) -->
+  <include file="$(find us3d_bringup)/launch/ur5e_bringup.launch">
+    <arg name="robot_ip" value="$(arg robot_ip)"/>
+  </include>
+
+  <!-- 2. MoveIt move_group -->
+  <include file="$(find ur5e_moveit_config)/launch/moveit_planning_execution.launch"/>
+
+  <!-- 3. Camera -->
+  <include file="$(find us3d_bringup)/launch/camera.launch"/>
+
+  <!-- Camera TF from hand-eye calibration is baked into URDF camera parameters -->
+
+  <!-- 4. Ultrasound capture -->
+  <include file="$(find us3d_bringup)/launch/us_capture.launch"/>
+
+  <!-- 5. ArUco detector -->
+  <node name="aruco_detector" pkg="us3d_perception" type="aruco_detector_node.py"
+        output="screen"/>
+
+  <!-- 6. Surface localizer -->
+  <node name="surface_localizer" pkg="us3d_perception" type="surface_localizer_node.py"
+        output="screen"/>
+
+  <!-- 7. Path generator -->
+  <node name="path_generator" pkg="us3d_control" type="path_generator_node.py"
+        output="screen"/>
+
+  <!-- 8. TCP pose publisher (base_link -> tool0 as PoseStamped) -->
+  <node name="tcp_pose_publisher" pkg="us3d_perception" type="tcp_pose_publisher.py"
+        output="screen">
+    <param name="rate" value="125.0"/>
+  </node>
+
+  <!-- 9. Sync recorder -->
+  <node name="sync_recorder" pkg="us3d_acquisition" type="sync_recorder_node.py"
+        output="screen">
+    <remap from="/us3d/wrench" to="/wrench"/>
+  </node>
+
+  <!-- 10. Curved-surface scan planner -->
+  <node name="scan_planner" pkg="us3d_control" type="scan_planner_node.py"
+        output="screen"/>
+
+  <!-- 11. Force scan controller (started manually via service call) -->
+  <node name="force_scan" pkg="us3d_control" type="force_scan_node.py"
+        output="screen"/>
+
+  <!-- 12. (Optional) VLM phantom recognizer + instruction planner -->
+  <include file="$(find us3d_bringup)/launch/vlm.launch"
+           if="$(arg enable_vlm)">
+    <arg name="vlm_base_url" value="$(arg vlm_base_url)"/>
+    <arg name="vlm_model" value="$(arg vlm_model)"/>
+  </include>
+
+  <!-- RViz for visualization -->
+  <node name="rviz" pkg="rviz" type="rviz"
+        args="-d $(find us3d_bringup)/config/us3d.rviz"
+        required="false"/>
+
+  <!-- Force curve plot (UR driver wrench, always publishing) -->
+  <node name="force_plot" pkg="rqt_plot" type="rqt_plot"
+        args="/wrench/wrench/force/x /wrench/wrench/force/y /wrench/wrench/force/z"
+        output="screen" required="false"/>
+</launch>

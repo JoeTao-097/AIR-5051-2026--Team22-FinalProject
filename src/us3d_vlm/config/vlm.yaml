@@ -1,0 +1,145 @@
+# Vision-Language Model configuration
+#
+# Endpoint expectations: an OpenAI Chat Completions compatible server
+# (e.g. `python -m vllm.entrypoints.openai.api_server --model
+# Qwen/Qwen2-VL-7B-Instruct`). The phantom_recognizer node uses
+# multimodal messages (text + image_url with base64 data URL); the
+# instruction_planner uses text-only multi-turn messages.
+#
+# All fields can be overridden by node-private params (~name).
+vlm:
+  # ---- Connection ----------------------------------------------
+  base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"   # OpenAI-compatible base URL
+  api_key:  "e692d760-7044-4b46-bc72-6e03dfb6261a"                       # 不要把真实 key 提交到公开仓库；
+                                          #   建议改用环境变量 / 私有覆盖文件
+  model:    "kimi-k2.6"                   # vision-language model；
+                                          #   ★ Kimi-k2.x 是 thinking
+                                          #   model：会把推理写到
+                                          #   reasoning_content 中，
+                                          #   再把最终答案写到 content。
+                                          #   max_tokens 必须 >= 2048
+                                          #   否则思考被截断就只剩
+                                          #   空的 content。
+  text_model: ""                          # optional separate text-only
+                                          #   model for the instruction
+                                          #   planner (fallback: model)
+  timeout_s: 180.0                        # 注意：开 streaming 后这是
+                                          #   "两个 chunk 之间最大空闲
+                                          #   时间"（idle read timeout），
+                                          #   不是总请求预算。180s 对
+                                          #   云端 thinking 模型来说
+                                          #   绰绰有余。
+  max_retries: 0                          # thinking 模型一次性慢是常态，
+                                          #   重试只会让事情更慢更贵。
+  use_response_format: false              # 火山方舟、Moonshot 等云
+                                          #   网关常常忽略此参数并
+                                          #   返回空体；本节点改用
+                                          #   prompt + 后端 JSON 提取。
+                                          #   只在自家 vLLM / OpenAI
+                                          #   官方 endpoint 才置 true。
+  stream: true                            # ★ 开 SSE 流式响应。对
+                                          #   kimi-k2 / deepseek-r1 /
+                                          #   qwen-thinking 等 thinking
+                                          #   model 必须开：思考阶段
+                                          #   也会持续输出 reasoning
+                                          #   chunk，TCP 连接不会因
+                                          #   read timeout 60s 这种
+                                          #   而被掐断。
+
+  # ---- Sampling ------------------------------------------------
+  temperature: 0.2
+  top_p: 0.9
+  max_tokens: 0                           # 0 = 不在请求里发 max_tokens
+                                          #   字段，让服务端用模型默认
+                                          #   上限。thinking model
+                                          #   推理长度难以预估，固定
+                                          #   值经常导致中途截断；不
+                                          #   限制是更稳的默认。
+                                          # 设非零正整数则强制 cap。
+
+  # ---- Phantom recognizer --------------------------------------
+  phantom_recognizer:
+    enabled: true
+    rate_hz: 0.0                          # 0 = disable periodic VLM
+                                          #   polling. Use the on-demand
+                                          #   service /us3d/recognize_phantom
+                                          #   instead. Recommended for
+                                          #   cloud thinking models which
+                                          #   take 10-60 s per call:
+                                          #   running a timer in the
+                                          #   background would block
+                                          #   the service whenever a
+                                          #   timer-triggered request
+                                          #   is mid-flight.
+                                          # Set to e.g. 0.05 (every 20 s)
+                                          # only if you actually need
+                                          # continuous monitoring.
+    service_lock_wait_s: 2.0              # How long the service waits
+                                          #   for the query lock before
+                                          #   giving up with a "busy"
+                                          #   message (only relevant
+                                          #   when rate_hz > 0).
+    image_topic: "/camera/color/image_raw"
+    image_jpeg_quality: 75                # 0-100; lower = smaller
+                                          #   payload, weaker recog
+    image_max_side_px: 512                # downscale long side before
+                                          #   sending. 512 is a good
+                                          #   trade-off for thinking
+                                          #   models (less prompt tokens
+                                          #   → less reasoning to do →
+                                          #   2-3× faster). Bump to 768
+                                          #   if details are missed.
+    publish_topic: "/us3d/phantom_info"
+    # Free-form list of phantom labels the VLM is encouraged to use.
+    # Anything outside this list is allowed but flagged.
+    known_labels:
+      - "knee"
+      - "wrist"
+      - "abdomen"
+      - "neck"
+      - "thyroid"
+      - "carotid"
+      - "cardiac"
+      - "muscle"
+      - "vessel"
+      - "gel_pad"
+      - "phantom_box"
+      - "unknown"
+
+  # ---- Instruction planner -------------------------------------
+  instruction_planner:
+    enabled: true
+    service_name: "/us3d/plan_from_instruction"
+    plan_scan_service: "/us3d/plan_scan"   # downstream curved-surface
+                                           #   planner service
+    # Safety bounds. The LLM's output is clamped to these before
+    # any ROS parameter is touched.
+    max_scan_length_mm: 200.0
+    min_scan_length_mm: 10.0
+    max_scan_speed_mms: 10.0
+    min_scan_speed_mms: 1.0
+    max_marker_id: 31                      # ArUco id range hint
+    # If the LLM does not specify which markers to use, default
+    # to this pair (matches the existing planner: 0 -> 1).
+    default_marker_pair: [0, 1]
+    # If true, the planner overrides /scan/scan_speed and
+    # /scan/scan_half_length on the parameter server before
+    # calling /us3d/plan_scan.
+    apply_to_param_server: true
+    # Auto-call /us3d/anchor_from_vlm before /us3d/plan_scan.
+    # When true, you do NOT need to run the ArUco detector or
+    # invoke /us3d/detect_markers — the VLM bbox + depth camera
+    # generate the marker poses directly. Set false to keep the
+    # legacy ArUco-based flow.
+    use_vlm_anchor: true
+    anchor_service: "/us3d/anchor_from_vlm"
+
+  # ---- VLM anchor (bbox → virtual marker) ----------------------
+  vlm_anchor:
+    bbox_inset_fraction: 0.10              # shrink each long-axis
+                                           #   endpoint inwards by this
+                                           #   fraction; avoids picking
+                                           #   bbox-edge depth holes
+    depth_patch_px: 7                      # median over an NxN patch
+                                           #   around each endpoint to
+                                           #   handle depth noise / holes

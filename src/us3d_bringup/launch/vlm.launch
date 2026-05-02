@@ -1,0 +1,43 @@
+<launch>
+  <!--
+    Vision-Language Model (vLLM) integration.
+
+    Loads the VLM config and starts:
+      1) phantom_recognizer_node — periodically describes what the
+         camera sees on the table.
+      2) instruction_planner_node — exposes /us3d/plan_from_instruction.
+
+    Both nodes assume an OpenAI-compatible HTTP server is reachable
+    at vlm.base_url. They start successfully even if the server is
+    down; they will simply log warnings until the server appears.
+  -->
+
+  <arg name="vlm_base_url" default=""/>     <!-- override config if not empty -->
+  <arg name="vlm_model"    default=""/>
+  <arg name="enable_recognizer" default="true"/>
+  <arg name="enable_planner"    default="true"/>
+  <arg name="enable_anchor"     default="true"/>   <!-- VLM bbox → virtual marker -->
+
+  <rosparam file="$(find us3d_vlm)/config/vlm.yaml" command="load"/>
+
+  <!-- Optional CLI overrides -->
+  <param name="/vlm/base_url" value="$(arg vlm_base_url)"
+         if="$(eval vlm_base_url != '')"/>
+  <param name="/vlm/model" value="$(arg vlm_model)"
+         if="$(eval vlm_model != '')"/>
+
+  <node name="phantom_recognizer" pkg="us3d_vlm"
+        type="phantom_recognizer_node.py" output="screen"
+        if="$(arg enable_recognizer)"/>
+
+  <node name="instruction_planner" pkg="us3d_vlm"
+        type="instruction_planner_node.py" output="screen"
+        if="$(arg enable_planner)"/>
+
+  <!-- Replaces ArUco-based marker localisation with bbox-from-VLM
+       reprojected via the depth camera. ArUco can stay disabled
+       when this node is up. -->
+  <node name="vlm_anchor" pkg="us3d_vlm"
+        type="vlm_anchor_node.py" output="screen"
+        if="$(arg enable_anchor)"/>
+</launch>

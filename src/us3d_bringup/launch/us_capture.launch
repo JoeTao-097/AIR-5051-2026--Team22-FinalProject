@@ -1,0 +1,28 @@
+<launch>
+  <!-- Ultrasound image capture from USB grabber.
+
+       Default device_id is the udev symlink /dev/us_capture (stable
+       across USB re-enumeration; install with
+       `sudo cp tools/99-us-capture.rules /etc/udev/rules.d/`).
+       If the symlink is missing, the node auto-falls back to the
+       first MACROSILICON USB3 Video card (idVendor=345f
+       idProduct=2131); failing that to /dev/video0.
+
+       Override on command line if needed:
+         roslaunch us3d_bringup us_capture.launch device_id:=0
+         roslaunch us3d_bringup us_capture.launch device_id:=/dev/video2
+  -->
+  <arg name="device_id" default="/dev/us_capture"/>
+  <arg name="frame_width" default="640"/>
+  <arg name="frame_height" default="480"/>
+  <arg name="fps" default="30"/>
+
+  <node name="us_capture_node" pkg="us3d_perception" type="us_capture_node.py"
+        output="screen" respawn="false">
+    <param name="device_id" value="$(arg device_id)"/>
+    <param name="frame_width" value="$(arg frame_width)"/>
+    <param name="frame_height" value="$(arg frame_height)"/>
+    <param name="fps" value="$(arg fps)"/>
+    <param name="frame_id" value="us_image_plane"/>
+  </node>
+</launch>

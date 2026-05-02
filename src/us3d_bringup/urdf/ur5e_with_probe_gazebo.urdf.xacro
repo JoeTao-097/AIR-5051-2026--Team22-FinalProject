@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="ur5e_robot">
+
+  <!-- ============ Parameters ============ -->
+  <xacro:arg name="kinematics_config" default="$(find ur_description)/config/ur5e/default_kinematics.yaml"/>
+  <xacro:arg name="transmission_hw_interface" default="hardware_interface/EffortJointInterface"/>
+
+  <!-- Probe mount offset from tool0 -->
+  <xacro:arg name="probe_x" default="0.0"/>
+  <xacro:arg name="probe_y" default="0.0"/>
+  <xacro:arg name="probe_z" default="0.00"/>
+  <xacro:arg name="probe_roll"  default="0.0"/>
+  <xacro:arg name="probe_pitch" default="0.0"/>
+  <xacro:arg name="probe_yaw"   default="0.0"/>
+
+  <!-- Camera mount offset from tool0 -->
+  <xacro:arg name="camera_x" default="0.0"/>
+  <xacro:arg name="camera_y" default="0.0"/>
+  <xacro:arg name="camera_z" default="0.01"/>
+  <xacro:arg name="camera_roll"  default="0.0"/>
+  <xacro:arg name="camera_pitch" default="-1.5708"/>
+  <xacro:arg name="camera_yaw"   default="0.0"/>
+
+  <!-- ============ UR5e Robot (Gazebo version with ros_control plugin) ============ -->
+  <xacro:include filename="$(find ur_gazebo)/urdf/ur_macro.xacro"/>
+  <xacro:ur_robot_gazebo
+    prefix=""
+    joint_limits_parameters_file="$(find ur_description)/config/ur5e/joint_limits.yaml"
+    kinematics_parameters_file="$(arg kinematics_config)"
+    physical_parameters_file="$(find ur_description)/config/ur5e/physical_parameters.yaml"
+    visual_parameters_file="$(find ur_description)/config/ur5e/visual_parameters.yaml"
+    transmission_hw_interface="$(arg transmission_hw_interface)"
+  />
+
+  <!-- World frame = base_link -->
+  <link name="world"/>
+  <joint name="world_joint" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- tool0_controller (required by MoveIt) -->
+  <link name="tool0_controller"/>
+  <joint name="tool_controller_fake_joint" type="fixed">
+    <parent link="tool0"/>
+    <child link="tool0_controller"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ============ Ultrasound Probe ============ -->
+  <!-- Physical probe: 155mm body length (measured), 5mm mount.
+       Total tool0→probe_tip distance when probe is straight = 160mm. -->
+  <link name="probe_mount">
+    <visual>
+      <geometry>
+        <cylinder radius="0.02" length="0.155"/>
+      </geometry>
+      <origin xyz="0 0 0.0775" rpy="0 0 0"/>
+      <material name="probe_grey">
+        <color rgba="0.5 0.5 0.5 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.02" length="0.155"/>
+      </geometry>
+      <origin xyz="0 0 0.0775" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="0.3"/>
+      <origin xyz="0 0 0.0775"/>
+      <inertia ixx="0.0006" ixy="0" ixz="0" iyy="0.0006" iyz="0" izz="0.00006"/>
+    </inertial>
+  </link>
+
+  <joint name="tool0_to_probe" type="fixed">
+    <parent link="tool0"/>
+    <child link="probe_mount"/>
+    <origin xyz="$(arg probe_x) $(arg probe_y) $(arg probe_z)"
+            rpy="$(arg probe_roll) $(arg probe_pitch) $(arg probe_yaw)"/>
+  </joint>
+
+  <link name="probe_tip"/>
+  <joint name="probe_to_tip" type="fixed">
+    <parent link="probe_mount"/>
+    <child link="probe_tip"/>
+    <origin xyz="0 0 0.155" rpy="0 0 0"/>
+  </joint>
+
+  <link name="us_image_plane"/>
+  <joint name="tip_to_us_plane" type="fixed">
+    <parent link="probe_tip"/>
+    <child link="us_image_plane"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ============ Orbbec Camera (eye-in-hand) ============ -->
+  <link name="camera_mount">
+    <visual>
+      <geometry>
+        <box size="0.09 0.025 0.03"/>
+      </geometry>
+      <material name="cam_black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.09 0.025 0.03"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.00002" ixy="0" ixz="0" iyy="0.00007" iyz="0" izz="0.00007"/>
+    </inertial>
+  </link>
+
+  <joint name="tool0_to_camera_mount" type="fixed">
+    <parent link="tool0"/>
+    <child link="camera_mount"/>
+    <origin xyz="$(arg camera_x) $(arg camera_y) $(arg camera_z)"
+            rpy="$(arg camera_roll) $(arg camera_pitch) $(arg camera_yaw)"/>
+  </joint>
+
+  <link name="camera_link"/>
+  <joint name="camera_mount_to_camera_link" type="fixed">
+    <parent link="camera_mount"/>
+    <child link="camera_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

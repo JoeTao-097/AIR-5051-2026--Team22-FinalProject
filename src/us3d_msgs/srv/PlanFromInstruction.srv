@@ -1,0 +1,34 @@
+# Translate a natural-language scan instruction into a concrete scan
+# plan and publish it to /us3d/scan_path.
+#
+# The Vision-Language Model is given:
+#   - the operator's instruction (e.g. "扫一下这个膝盖体模长轴 80mm")
+#   - the latest phantom recognition result (PhantomInfo)
+#   - the latest detected ArUco markers (positions in base_link)
+#
+# It returns a structured plan that the instruction_planner_node
+# then validates against safety limits and converts into ROS
+# parameters before delegating to /us3d/plan_scan.
+#
+# This indirection is intentional: the LLM never produces raw
+# robot waypoints; it only produces semantic-level scan parameters.
+# The existing curved-surface scan_planner remains the only
+# component that emits actual /us3d/scan_path.
+
+# --- Request -----------------------------------------------------
+string instruction        # natural-language sentence (any language)
+bool   dry_run            # if true, plan but do NOT publish path
+                          # (planner returns the JSON plan only)
+---
+# --- Response ----------------------------------------------------
+bool   success
+string message            # human-readable status
+string plan_json          # structured plan returned by the LLM,
+                          # parsed and validated, e.g.:
+                          # {
+                          #   "scan_axis": "long",
+                          #   "scan_length_mm": 80.0,
+                          #   "scan_speed_mms": 3.0,
+                          #   "use_marker_pair": [0, 1],
+                          #   "phantom_type": "knee"
+                          # }

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>us3d_vlm</name>
+  <version>0.1.0</version>
+  <description>
+    Vision-Language Model integration for the US 3D scanning system.
+
+    Connects to a vLLM-style OpenAI-compatible HTTP server hosting a
+    multimodal model (e.g. Qwen2-VL, InternVL, Llama-3.2-Vision). Two
+    nodes are provided:
+
+      * phantom_recognizer_node — looks at the camera color frame and
+        publishes a us3d_msgs/PhantomInfo describing the phantom on
+        the table.
+      * instruction_planner_node — converts a natural-language scan
+        instruction into structured scan parameters and dispatches
+        them to the existing curved-surface scan_planner.
+
+    The VLM never emits robot waypoints directly; it only produces
+    semantic-level hints, which are validated against safety limits
+    before being applied.
+  </description>
+
+  <maintainer email="qc@todo.todo">qc</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>us3d_msgs</depend>
+</package>

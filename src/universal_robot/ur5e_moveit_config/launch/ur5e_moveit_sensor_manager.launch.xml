@@ -1,0 +1,21 @@
+<launch>
+  <rosparam>
+    sensors:
+      - sensor_plugin: occupancy_map_monitor/PointCloudOctomapUpdater
+        point_cloud_topic: /camera/depth/points
+        max_range: 2.0
+        # min_range: drop depth samples closer than this. Critical for
+        # eye-in-hand cameras: when the wrist gets within ~25cm of the
+        # target, the body fills the camera FOV and gets re-projected
+        # into octomap voxels right next to the camera_mount link,
+        # producing spurious "self-collisions" that abort approach
+        # trajectories. 0.30m keeps everything during free navigation
+        # (camera typically >40cm from objects) and stops false alarms
+        # during scan approach.
+        min_range: 0.30
+        point_subsample: 1
+        padding_offset: 0.1
+        padding_scale: 1.0
+        filtered_cloud_topic: /move_group/filtered_cloud
+  </rosparam>
+</launch>

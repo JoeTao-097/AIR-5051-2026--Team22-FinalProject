@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>us3d_acquisition</name>
+  <version>0.1.0</version>
+  <description>Synchronized data acquisition: US image + TCP pose + force/torque</description>
+
+  <maintainer email="qc@todo.todo">qc</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>message_filters</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>rosbag</exec_depend>
+  <exec_depend>us3d_msgs</exec_depend>
+</package>
